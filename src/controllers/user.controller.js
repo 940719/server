@@ -18,12 +18,14 @@ const toUserJSON = (row) => {
 // body: { name, password }
 // 角色：'admin' 管理员 / 'user' 普通用户
 const login = async (req, res) => {
+  console.log('login', req.body);
   try {
     const { name, password } = req.body
     if (!name || !password) return fail(res, '用户名和密码不能为空', 400)
-    const [rows] = await db.query('SELECT * FROM user WHERE name = ?', [name])
+    const [rows] = await db.query('SELECT * FROM user WHERE username = ?', [name])
     const row = rows[0]
     // 统一提示，避免暴露"用户是否存在"（防枚举）
+    console.log('11111', row.password, hashPassword(password));
     if (!row || row.password !== hashPassword(password)) {
       return fail(res, '用户名或密码错误', 401)
     }

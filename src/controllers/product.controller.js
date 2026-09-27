@@ -13,7 +13,7 @@ const toJSON = (row) => {
     originPrice: row.origin_price,
     flashPrice: row.flash_price,
     sales: row.sales,
-    image: row.image
+    image: row.img
   }
 }
 // 从 data URI（如 data:image/png;base64,xxx）中解析出 mime 与 buffer
@@ -26,6 +26,11 @@ const parseImage = (image) => {
     mime: match[1],
     buffer: Buffer.from(match[2], 'base64')
   }
+}
+// 组装图片访问 URL：优先环境变量 IMG_BASE_URL（nginx/域名场景），否则按当前请求 host 推导
+const buildImageUrl = (req, filename) => {
+  const base = (process.env.IMG_BASE_URL || req.protocol + '://' + req.get('host')).replace(/\/+$/, '')
+  return base + '/uploads/' + filename
 }
 // ========== 接口：商品列表 GET /api/products（支持 ?type= 按类型过滤）==========
 const getProductList = async (req, res) => {
@@ -46,18 +51,18 @@ const getProductList = async (req, res) => {
   }
 }
 // ========== 接口：新增商品 POST /api/product ==========
-// body: { type, name, price, seckillPrice, image }
+// body: { type, name, price, seckillPrice, image, emoji }
 // image 可为：data URI(base64 字符串) / URL / 空，三种都支持
 const postProduct = async (req, res) => {
   try {
-    const { type = '', name, price = 0, seckillPrice = null, image = null } = req.body
+    const { type = '', name, price = 0, seckillPrice = null, image = null, emoji = null } = req.body
     if (!name) return fail(res, '商品名称 name 不能为空', 400)
     if (price === '' || price === null || price === undefined || isNaN(Number(price))) {
       return fail(res, '商品价格 price 必须为数字', 400)
     }
     const [result] = await db.query(
-      'INSERT INTO product (type, name, price, seckill_price, image) VALUES (?, ?, ?, ?, ?)',
-      [type, name, Number(price), seckillPrice === '' ? null : seckillPrice, image]
+      'INSERT INTO product (type, name, price, flash_price, img, emoji) VALUES (?, ?, ?, ?, ?, ?)',
+      [type, name, Number(price), seckillPrice === '' ? null : seckillPrice, image, emoji]
     )
     const insertId = result.insertId
     const [rows] = await db.query('SELECT * FROM product WHERE id = ?', [insertId])
@@ -85,7 +90,7 @@ const getProductById = async (req, res) => {
 const putProductById = async (req, res) => {
   try {
     const { id } = req.params
-    const { type, name, price, seckillPrice, image } = req.body
+    const { type, name, price, seckillPrice, image, emoji } = req.body
     const [existRows] = await db.query('SELECT * FROM product WHERE id = ?', [id])
     const exist = existRows[0]
     if (!exist) return fail(res, '商品不存在', 404)
@@ -93,13 +98,14 @@ const putProductById = async (req, res) => {
     const newType = type !== undefined ? type : exist.type
     const newName = name !== undefined ? name : exist.name
     const newPrice = price !== undefined ? Number(price) : exist.price
-    const newSeckill = seckillPrice !== undefined ? (seckillPrice === '' ? null : seckillPrice) : exist.seckill_price
-    const newImage = image !== undefined ? image : exist.image
+    const newSeckill = seckillPrice !== undefined ? (seckillPrice === '' ? null : seckillPrice) : exist.flash_price
+    const newImage = image !== undefined ? image : exist.img
+    const newEmoji = emoji !== undefined ? emoji : exist.emoji
     if (newPrice !== null && isNaN(newPrice)) return fail(res, '价格必须为数字', 400)
 
     await db.query(
-      'UPDATE product SET type = ?, name = ?, price = ?, seckill_price = ?, image = ? WHERE id = ?',
-      [newType, newName, newPrice, newSeckill, newImage, id]
+      'UPDATE product SET type = ?, name = ?, price = ?, flash_price = ?, img = ?, emoji = ? WHERE id = ?',
+      [newType, newName, newPrice, newSeckill, newImage, newEmoji, id]
     )
     const [rows] = await db.query('SELECT * FROM product WHERE id = ?', [id])
     const row = rows[0]
@@ -132,10 +138,21 @@ const uploadProductImage = async (req, res) => {
     if (!req.file) return fail(res, '请上传图片文件（字段名 image）', 400)
     const { mimetype, buffer } = req.file
     const dataUri = `data:${mimetype};base64,${buffer.toString('base64')}`
-    await db.query('UPDATE product SET image = ? WHERE id = ?', [dataUri, id])
+    await db.query('UPDATE product SET img = ? WHERE id = ?', [dataUri, id])
     const [updatedArr] = await db.query('SELECT * FROM product WHERE id = ?', [id])
     const updated = updatedArr[0]
     success(res, toJSON(updated), '图片上传成功')
+  } catch (err) {
+    console.error(err)
+    fail(res, err.message)
+  }
+}
+// ========== 接口：通用图片上传 POST /api/upload（multipart/form-data，字段名 file）==========
+// 图片保存到服务器本地 uploads 目录，返回可直接访问的 URL
+const uploadImage = async (req, res) => {
+  try {
+    if (!req.file) return fail(res, '请上传图片文件（字段名 file）', 400)
+    success(res, { url: buildImageUrl(req, req.file.filename), filename: req.file.filename }, '上传成功')
   } catch (err) {
     console.error(err)
     fail(res, err.message)
@@ -146,10 +163,10 @@ const uploadProductImage = async (req, res) => {
 const getProductImage = async (req, res) => {
   try {
     const { id } = req.params
-    const [rowArr] = await db.query('SELECT image FROM product WHERE id = ?', [id])
+    const [rowArr] = await db.query('SELECT img FROM product WHERE id = ?', [id])
     const row = rowArr[0]
     if (!row) return fail(res, '商品不存在', 404)
-    const img = parseImage(row.image)
+    const img = parseImage(row.img)
     if (!img) return fail(res, '该商品没有存 base64 图片（可能是 URL 或未上传）', 404)
     res.setHeader('Content-Type', img.mime)
     res.setHeader('Cache-Control', 'public, max-age=86400')
@@ -166,5 +183,6 @@ module.exports = {
   putProductById,
   deleteProductById,
   uploadProductImage,
+  uploadImage,
   getProductImage
 }
