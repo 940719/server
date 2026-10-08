@@ -35,16 +35,43 @@ const buildImageUrl = (req, filename) => {
 // ========== 接口：商品列表 GET /api/products（支持 ?type= 按类型过滤）==========
 const getProductList = async (req, res) => {
   try {
-    const { type } = req.query
-    let rows
+    const { type, pageNum, pageSize } = req.query
+    let sql = 'SELECT * FROM product WHERE 1=1'
+    let params = []
+
+    // 拼接type条件
     if (type) {
-      const [result] = await db.query('SELECT * FROM product WHERE type = ? ORDER BY id', [type])
-      rows = result
-    } else {
-      const [result] = await db.query('SELECT * FROM product ORDER BY id')
-      rows = result
+      sql += ' AND type = ?'
+      params.push(type)
     }
-    success(res, rows.map(toJSON))
+    sql += ' ORDER BY id'
+
+    // 核心：同时传 pageNum、pageSize 才加分页，否则查全部
+    let needPagination = pageNum && pageSize
+    if (needPagination) {
+      const offset = (Number(pageNum) - 1) * Number(pageSize)
+      sql += ' LIMIT ?, ?'
+      params.push(offset, Number(pageSize))
+    }
+
+    const [rows] = await db.query(sql, params)
+
+    if (needPagination) {
+      // 需要分页：查询符合条件的总条数（带上type过滤）
+      let countSql = sql.split('ORDER BY')[0].replace('SELECT *', 'SELECT COUNT(*) AS total')
+      const [[totalRow]] = await db.query(countSql, params.slice(0, params.length - 2))
+      const list = rows.map(toJSON)
+      success(res, {
+        list,
+        total: totalRow.total,
+        pageNum,
+        pageSize
+      })
+    } else {
+      // 不传分页参数，直接返回全部数组，不带分页对象
+      const list = rows.map(toJSON)
+      success(res, list)
+    }
   } catch (err) {
     console.error(err)
     fail(res, err.message)
@@ -55,14 +82,14 @@ const getProductList = async (req, res) => {
 // image 可为：data URI(base64 字符串) / URL / 空，三种都支持
 const postProduct = async (req, res) => {
   try {
-    const { type = '', name, price = 0, seckillPrice = null, image = null, emoji = null } = req.body
+    const { type = '', name, price = 0, seckillPrice = null, image = null, flash_price = null, emoji = null } = req.body
     if (!name) return fail(res, '商品名称 name 不能为空', 400)
     if (price === '' || price === null || price === undefined || isNaN(Number(price))) {
       return fail(res, '商品价格 price 必须为数字', 400)
     }
     const [result] = await db.query(
       'INSERT INTO product (type, name, price, flash_price, img, emoji) VALUES (?, ?, ?, ?, ?, ?)',
-      [type, name, Number(price), seckillPrice === '' ? null : seckillPrice, image, emoji]
+      [type, name, Number(price), flash_price === '' ? null : flash_price, image, emoji]
     )
     const insertId = result.insertId
     const [rows] = await db.query('SELECT * FROM product WHERE id = ?', [insertId])
@@ -90,7 +117,7 @@ const getProductById = async (req, res) => {
 const putProductById = async (req, res) => {
   try {
     const { id } = req.params
-    const { type, name, price, seckillPrice, image, emoji } = req.body
+    const { type, name, price, seckillPrice, image, emoji, originPrice } = req.body
     const [existRows] = await db.query('SELECT * FROM product WHERE id = ?', [id])
     const exist = existRows[0]
     if (!exist) return fail(res, '商品不存在', 404)
@@ -101,11 +128,12 @@ const putProductById = async (req, res) => {
     const newSeckill = seckillPrice !== undefined ? (seckillPrice === '' ? null : seckillPrice) : exist.flash_price
     const newImage = image !== undefined ? image : exist.img
     const newEmoji = emoji !== undefined ? emoji : exist.emoji
+    const newOriginPrice = originPrice !== undefined ? Number(originPrice) : exist.origin_price
     if (newPrice !== null && isNaN(newPrice)) return fail(res, '价格必须为数字', 400)
 
     await db.query(
-      'UPDATE product SET type = ?, name = ?, price = ?, flash_price = ?, img = ?, emoji = ? WHERE id = ?',
-      [newType, newName, newPrice, newSeckill, newImage, newEmoji, id]
+      'UPDATE product SET type = ?, name = ?, price = ?, flash_price = ?, img = ?, emoji = ?, origin_price = ? WHERE id = ?',
+      [newType, newName, newPrice, newSeckill, newImage, newEmoji, newOriginPrice, id]
     )
     const [rows] = await db.query('SELECT * FROM product WHERE id = ?', [id])
     const row = rows[0]
