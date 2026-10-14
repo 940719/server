@@ -41,7 +41,7 @@ const getProductList = async (req, res) => {
 
     // 拼接type条件
     if (type) {
-      sql += ' AND type = ?'
+      sql += ' AND CAST(type AS CHAR) = ?'
       params.push(type)
     }
     sql += ' ORDER BY id'

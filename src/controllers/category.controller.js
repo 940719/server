@@ -13,8 +13,8 @@ const toJSON = (row) => {
 const getCategoryList = async (req, res) => {
   try {
     // 获取前端传的分页参数，默认 pageNum=1，pageSize=10
-    const pageNum = parseInt(req.query.pageNum);
-    const pageSize = parseInt(req.query.pageSize);
+    const pageNum = parseInt(req.query.pageNum) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
     // 计算偏移量
     const offset = (pageNum - 1) * pageSize;
     // ① 查询当前页数据
