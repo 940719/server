@@ -1,4 +1,4 @@
-const db = require("../config/db");
+﻿const db = require("../config/db");
 const { success, fail } = require("../utils/response");
 const toJSON = (row) => {
   if (!row) return null;
@@ -12,16 +12,19 @@ const toJSON = (row) => {
 };
 const getCategoryList = async (req, res) => {
   try {
-    // 获取前端传的分页参数，默认 pageNum=1，pageSize=10
-    const pageNum = parseInt(req.query.pageNum) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    // 计算偏移量
-    const offset = (pageNum - 1) * pageSize;
-    // ① 查询当前页数据
-    const [rows] = await db.query(
-      "SELECT * FROM category ORDER BY sort DESC LIMIT ?, ?",
-      [offset, pageSize],
-    );
+    // 分页参数可传可不传：传了按分页查询，不传查询全部
+    const pageNum = req.query.pageNum ? parseInt(req.query.pageNum) : null;
+    const pageSize = req.query.pageSize ? parseInt(req.query.pageSize) : null;
+    let rows;
+    if (pageNum && pageSize) {
+      const offset = (pageNum - 1) * pageSize;
+      [rows] = await db.query(
+        "SELECT * FROM category ORDER BY sort DESC LIMIT ?, ?",
+        [offset, pageSize],
+      );
+    } else {
+      [rows] = await db.query("SELECT * FROM category ORDER BY sort DESC");
+    }
     // ② 查询总条数
     const [[totalRow]] = await db.query(
       "SELECT COUNT(*) AS total FROM category",
