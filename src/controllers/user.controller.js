@@ -1,4 +1,4 @@
-const db = require("../config/db");
+﻿const db = require("../config/db");
 const { success, fail } = require("../utils/response");
 const { hashPassword } = require("../utils/password");
 
@@ -134,7 +134,22 @@ const deleteUserById = async (req, res) => {
     fail(res, err.message);
   }
 };
+// ========== 接口：修改当前用户昵称 PUT /api/user/me ==========
+const updateMe = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { nickname } = req.body;
+    if (!nickname || !nickname.trim()) return fail(res, '昵称不能为空', 400);
+    await db.query('UPDATE user SET nickname = ? WHERE id = ?', [nickname.trim(), userId]);
+    const [rows] = await db.query('SELECT * FROM user WHERE id = ?', [userId]);
+    success(res, toUserJSON(rows[0]), '昵称已更新');
+  } catch (err) {
+    fail(res, err.message);
+  }
+};
+
 module.exports = {
+  updateMe,
   login,
   getUserList,
   postUser,

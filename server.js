@@ -5,6 +5,11 @@ const path = require('path')
 const userRoutes = require('./src/routes/user.routes')
 const productRoutes = require('./src/routes/product.routes')
 const categoryRoutes = require('./src/routes/category.routes')
+const cartRoutes = require('./src/routes/cart.routes')
+const addressRoutes = require('./src/routes/address.routes')
+const orderRoutes = require('./src/routes/order.routes')
+const couponRoutes = require('./src/routes/coupon.routes')
+const favoriteRoutes = require('./src/routes/favorite.routes')
 const app = express()
 app.use(cors())
 
@@ -23,6 +28,11 @@ app.use(express.json({ limit: '8mb' })) // 解析post json参数（含 base64 �
 app.use('/api', userRoutes)
 app.use('/api', productRoutes)
 app.use('/api', categoryRoutes)
+app.use('/api', cartRoutes)
+app.use('/api', addressRoutes)
+app.use('/api', orderRoutes)
+app.use('/api', couponRoutes)
+app.use('/api', favoriteRoutes)
 // 上传（multer）等错误统一返回 JSON，避免返回 HTML 错误页
 app.use((err, req, res, next) => {
   if (err) {

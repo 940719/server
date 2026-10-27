@@ -2,15 +2,16 @@ const express = require("express");
 const router = express.Router();
 const categoryCtrl = require("../controllers/category.controller");
 const authMiddleware = require("../middleware/auth");
-router.get("/getCategories", authMiddleware, categoryCtrl.getCategoryList);
-router.post("/addCategory", authMiddleware, categoryCtrl.addCategory);
+// 增删改查各自独立路径
+router.get("/categories/list", authMiddleware, categoryCtrl.getCategoryList);
+router.post("/categories/add", authMiddleware, categoryCtrl.addCategory);
 router.put(
-  "/updateCategoryById/:id",
+  "/categories/update/:id",
   authMiddleware,
   categoryCtrl.updateCategoryById,
 );
 router.delete(
-  "/deleteCategoryById/:id",
+  "/categories/delete/:id",
   authMiddleware,
   categoryCtrl.deleteCategoryById,
 );

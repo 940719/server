@@ -40,21 +40,22 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-router.get("/products", authMiddleware, productCtrl.getProductList);
-router.post("/product", authMiddleware, productCtrl.postProduct);
-router.get("/product/:id", authMiddleware, productCtrl.getProductById);
-router.put("/product/:id", authMiddleware, productCtrl.putProductById);
-router.delete("/product/:id", authMiddleware, productCtrl.deleteProductById);
+// 增删改查各自独立路径
+router.get("/products/list", authMiddleware, productCtrl.getProductList);
+router.post("/products/add", authMiddleware, productCtrl.postProduct);
+router.get("/products/detail/:id", authMiddleware, productCtrl.getProductById);
+router.put("/products/update/:id", authMiddleware, productCtrl.putProductById);
+router.delete("/products/delete/:id", authMiddleware, productCtrl.deleteProductById);
 
-// 新方案：通用图片上传 → 保存本地目录，返回访问 URL
-router.post("/upload", uploadDisk.single("file"), productCtrl.uploadImage);
+// 新方案：通用图片上传 → 保存本地目录，返回访问 URL（独立操作路径）
+router.post("/uploads", uploadDisk.single("file"), productCtrl.uploadImage);
 
-// 旧方案：图片上传（multipart，字段名 image）与读取
+// 旧方案：图片上传（multipart，字段名 image）与读取（独立操作路径）
 router.post(
-  "/product/:id/image",
+  "/products/uploadImage/:id",
   upload.single("image"),
   productCtrl.uploadProductImage,
 );
-router.get("/product/:id/image", authMiddleware, productCtrl.getProductImage);
+router.get("/products/image/:id", authMiddleware, productCtrl.getProductImage);
 
 module.exports = router;
