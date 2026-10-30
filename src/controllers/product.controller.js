@@ -44,7 +44,7 @@ const getProductList = async (req, res) => {
       sql += ' AND CAST(type AS CHAR) = ?'
       params.push(type)
     }
-    sql += ' ORDER BY id'
+    sql += ' ORDER BY id DESC'
 
     // 核心：同时传 pageNum、pageSize 才加分页，否则查全部
     let needPagination = pageNum && pageSize
