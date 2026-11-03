@@ -15,8 +15,30 @@ const toUserJSON = (row) => {
     phone: row.phone,
     avatar: row.avatar,
     role: row.role, // 直接返回数字，前端做中文映射
+    status: row.status, // 1 启用 / 0 禁用
     createTime: row.create_time,
   };
+};
+
+// 超管权限校验：从当前登录 userId 查库确认 role===1
+const requireSuperAdmin = async (req, res) => {
+  if (!req.user || !req.user.userId) {
+    fail(res, "未登录", 401);
+    return false;
+  }
+  const [rows] = await db.query("SELECT role FROM user WHERE id = ?", [
+    req.user.userId,
+  ]);
+  const me = rows[0];
+  if (!me) {
+    fail(res, "账号不存在", 404);
+    return false;
+  }
+  if (me.role !== 1) {
+    fail(res, "仅超级管理员可执行该操作", 403);
+    return false;
+  }
+  return true;
 };
 // ========== 接口：登录 POST /api/auth/login ==========
 // body: { name, password }
@@ -32,6 +54,10 @@ const login = async (req, res) => {
     // 统一提示，避免暴露"用户是否存在"（防枚举）
     if (!row || row.password !== hashPassword(password)) {
       return fail(res, "用户名或密码错误", 401);
+    }
+    // 禁用账号禁止登录
+    if (row.status === 0) {
+      return fail(res, "账号已被禁用，请联系管理员", 403);
     }
     // ============生成token ============
     const token = jwt.sign(
@@ -129,24 +155,44 @@ const getUserById = async (req, res) => {
   }
 };
 // ========== 接口：修改用户 PUT /api/users/update/:id ==========
-// body 可含 name / age / role / password（未传的字段保留原值）
+// 仅超级管理员（role 1）可调用；body 可含 nickname / phone / role / password / status
+// 未传字段保留原值；禁止修改/禁用超级管理员账号（防止锁死系统）
 const putUserById = async (req, res) => {
   try {
+    if (!(await requireSuperAdmin(req, res))) return;
     const { id } = req.params;
-    const { name, age, role, password } = req.body;
+    const { nickname, phone, role, password, status } = req.body;
     const [existRows] = await db.query("SELECT * FROM user WHERE id = ?", [id]);
     const exist = existRows[0];
     if (!exist) return fail(res, "用户不存在", 404);
-    const newName = name !== undefined ? name : exist.name;
-    const newAge = age !== undefined ? age : exist.age;
-    const newRole = role !== undefined ? role : exist.role;
+    // 保护：不能修改/禁用/降级超级管理员账号
+    if (exist.role === 1) {
+      return fail(res, "超级管理员账号受保护，不可修改", 403);
+    }
+    const newNickname =
+      nickname !== undefined ? String(nickname).trim() || exist.nickname : exist.nickname;
+    const newPhone =
+      phone !== undefined ? (String(phone).trim() || null) : exist.phone;
+    let newRole = exist.role;
+    if (role !== undefined) {
+      const roleNum = Number(role);
+      if (![2, 3].includes(roleNum))
+        return fail(res, "角色 role 只能是 2管理员 / 3普通用户", 400);
+      newRole = roleNum;
+    }
+    let newStatus = exist.status;
+    if (status !== undefined) {
+      const s = Number(status);
+      if (s !== 0 && s !== 1) return fail(res, "状态 status 只能是 0禁用 / 1启用", 400);
+      newStatus = s;
+    }
     const newPassword =
-      password !== undefined ? hashPassword(password) : exist.password;
-    if (newRole !== "admin" && newRole !== "user")
-      return fail(res, "角色 role 只能是 admin 或 user", 400);
+      password !== undefined && String(password).trim()
+        ? hashPassword(String(password).trim())
+        : exist.password;
     await db.query(
-      "UPDATE user SET name=?, age=?, role=?, password=? WHERE id=?",
-      [newName, newAge, newRole, newPassword, id],
+      "UPDATE user SET nickname = ?, phone = ?, role = ?, status = ?, password = ? WHERE id = ?",
+      [newNickname, newPhone, newRole, newStatus, newPassword, id],
     );
     const [rows] = await db.query("SELECT * FROM user WHERE id = ?", [id]);
     const row = rows[0];
@@ -185,10 +231,27 @@ const updateMe = async (req, res) => {
   }
 };
 
+// ========== 接口：当前登录用户信息 GET /api/auth/me ==========
+// 返回完整用户信息（含 role / status），供前端刷新角色权限
+const getMe = async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM user WHERE id = ?", [
+      req.user.userId,
+    ]);
+    const row = rows[0];
+    if (!row) return fail(res, "用户不存在", 404);
+    success(res, toUserJSON(row));
+  } catch (err) {
+    console.error(err);
+    fail(res, err.message);
+  }
+};
+
 module.exports = {
   updateMe,
   login,
   restoreByToken,
+  getMe,
   getUserList,
   postUser,
   getUserById,

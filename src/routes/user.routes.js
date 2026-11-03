@@ -7,6 +7,8 @@ const authMiddleware = require("../middleware/auth");
 router.post("/auth/login", userCtrl.login);
 // 免登录恢复（商城跳转场景：token 在 body 中校验，不走请求头鉴权）
 router.post("/auth/restore", userCtrl.restoreByToken);
+// 当前登录用户信息（含角色/状态，前端权限判断依据）
+router.get("/auth/me", authMiddleware, userCtrl.getMe);
 // 当前用户资料接口（独立路径）
 router.put("/users/me", authMiddleware, userCtrl.updateMe);
 // 增删改查各自独立路径

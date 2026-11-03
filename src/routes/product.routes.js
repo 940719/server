@@ -43,7 +43,8 @@ const upload = multer({
 // 增删改查各自独立路径
 router.get("/products/list", authMiddleware, productCtrl.getProductList);
 router.post("/products/add", authMiddleware, productCtrl.postProduct);
-router.get("/products/detail/:id", authMiddleware, productCtrl.getProductById);
+// 商品详情公开：商城详情页需未登录也能浏览
+router.get("/products/detail/:id", productCtrl.getProductById);
 router.put("/products/update/:id", authMiddleware, productCtrl.putProductById);
 router.delete("/products/delete/:id", authMiddleware, productCtrl.deleteProductById);
 
